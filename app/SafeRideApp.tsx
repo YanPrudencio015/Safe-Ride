@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { json } from "stream/consumers";
 import Home from "./page";
-import Passenger from "./dashboards/clientDashboard/Map";
+import PassengerMAP from "./dashboards/clientDashboard/Map";
 import { GetAPIToken } from "./hook/APIAcess";
 
 import dynamic from "next/dynamic";
@@ -14,6 +14,7 @@ const FormClient = dynamic(() => import("@/app/components/FormClient"), {
 
 const incidents = [
   { id: "1", latitude: -22.9068, longitude: -43.1729 }, // example to destact an area. This code will already be used
+  { id: "2", latitude: -22.99026, longitude: -43.351391 }, // example to destact an area. This code will already be used
 ];
 
 export default function SafeRideApp() {
@@ -51,7 +52,7 @@ export default function SafeRideApp() {
     >
       <FormClient onSubmit={handleRoute} />
       {/* map square for the passanger */}
-      <Passenger routeGeoData={routeGeoData} incidents={incidents} />
+      <PassengerMAP routeGeoData={routeGeoData} incidents={incidents} />
     </div>
   );
 }

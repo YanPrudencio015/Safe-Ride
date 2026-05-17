@@ -2,8 +2,8 @@
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useEffect, useRef, useState } from "react";
-
-import { UseRiskZones } from "@/app/hook/useRiskZones";
+import { getNeighborhoodsFromRoute } from "@/app/hook/RouteNeighbor";
+import { UseRiskZones, Incident } from "@/app/hook/useRiskZones";
 import {
   useRouteOccurrences,
   type Occurrence,
@@ -14,15 +14,18 @@ type MapProps = {
   routeGeoData: GeoJSON.LineString | null;
   incidents: { id: string; latitude: number; longitude: number }[];
 };
+
+import type { NewsItem, RouteAnalyticsPayload } from "@/app/types/route";
 const SOURCE_ID = "risk-zones";
 const OCCURRENCE_LAYER_ID = "route-occurrences";
 
-export default function Passenger({ routeGeoData, incidents }: MapProps) {
+export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const MapContainerRef = useRef<HTMLDivElement>(null);
   const pendingRouteRef = useRef<GeoJSON.LineString | null>(null);
   const occurrenceMarkersRef = useRef<mapboxgl.Marker[]>([]);
-  const riskZones = UseRiskZones(incidents);
+  const [riskCoords, setRiskCoords] = useState<Incident[]>([]);
+  const riskZones = UseRiskZones(riskCoords);
   const markRef = useRef<mapboxgl.Marker[]>([]);
   const [coordinatesMatching, setcoordinatesMatching] =
     useState<GeoJSON.LineString | null>(null);
@@ -38,7 +41,7 @@ export default function Passenger({ routeGeoData, incidents }: MapProps) {
   );
 
   // --- before all, start the map from MAPBOX ---------------
-  // this form avoid errors that needs the map loaded
+  // this way avoid errors that needs the map loaded
   useEffect(() => {
     if (!MapContainerRef.current) return;
 
@@ -67,7 +70,7 @@ export default function Passenger({ routeGeoData, incidents }: MapProps) {
   // --- Capture click on map -------------------------------------------------
 
   // On this case, check if map loaded.
-  // Then check where the user click on the map, save the data on setMoveEvent
+  // Then check where the user click on the map, and save the data on setMoveEvent
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -108,6 +111,7 @@ export default function Passenger({ routeGeoData, incidents }: MapProps) {
     const coords = coordinates.map(([lng, lat]) => `${lng},${lat}`).join(";");
 
     async function newRoute() {
+      const map = mapRef.current;
       const newRoute = await fetch(
         `api/coordinates?coordinates=${coords}`,
       ).then((data) => data.json());
@@ -122,6 +126,10 @@ export default function Passenger({ routeGeoData, incidents }: MapProps) {
       }).then((r) => r.json());
 
       setcoordinatesMatching(direction);
+      if (map) {
+        if (map.getLayer("circles-layer")) map.removeLayer("circles-layer");
+        if (map.getSource("circles-source")) map.removeSource("circles-source");
+      }
       markRef.current.forEach((m) => m.remove());
       markRef.current = [];
       setMarkCount(0);
@@ -129,9 +137,48 @@ export default function Passenger({ routeGeoData, incidents }: MapProps) {
       setMoveEvent(null);
     }
 
-    // console.log("coordinates: ", coordinates);
     newRoute();
   }, [coordinates]);
+
+  // --- Gemini -------------------------------------------------------
+
+  async function SecurityAnalitics(
+    neighborhoods: string[],
+    coordinates: number[][],
+    news: NewsItem[],
+  ) {
+    const payload: RouteAnalyticsPayload = {
+      neighborhoodNames: neighborhoods,
+      neighborhoodCoordinates: coordinates,
+      neighborhoodNews: news,
+      prompt: "Analiza se são bairros seguros",
+    };
+    const response = await fetch("api/gemini", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.details || "Erro na API");
+
+    // console.log("resposta do Gemini: ", data);
+
+    const allCords = data.result[1].map((coords: any) => coords.coord);
+    const incidents = allCords.map(
+      ([lng, lat]: [number, number], index: number) => ({
+        id: String(index),
+        latitude: lat,
+        longitude: lng,
+      }),
+    );
+
+    setRiskCoords(incidents);
+
+    if (!data.result) {
+      // Aqui você atualiza um estado (state) para exibir na tela
+    }
+  }
 
   // --- React to new externals route data -----------------------------------
 
@@ -149,17 +196,13 @@ export default function Passenger({ routeGeoData, incidents }: MapProps) {
       pendingRouteRef.current = routeGeoData;
       return;
     }
-
     drawRoute(map, routeGeoData);
   }, [routeGeoData]);
 
+  // PassengerMap.tsx — dentro do useEffect do coordinatesMatching
   useEffect(() => {
-    // Prevent execution if there is no match with the coordinates
     if (!coordinatesMatching) return;
-
     const map = mapRef.current;
-
-    // if the map and styles doens't loaded, then, save the matching coordinates data
     if (!map || !map.isStyleLoaded()) {
       pendingRouteRef.current = coordinatesMatching;
       return;
@@ -167,7 +210,29 @@ export default function Passenger({ routeGeoData, incidents }: MapProps) {
 
     drawRoute(map, coordinatesMatching);
 
-    console.log("coordinatesMatching: ", coordinatesMatching);
+    // ------------------------- searching neighborhoods news ------------------------------
+    const run = async () => {
+      const { neighborhoods, simplified } = await getNeighborhoodsFromRoute(
+        coordinatesMatching.coordinates,
+        process.env.NEXT_PUBLIC_MAP_TOKEN!,
+      );
+
+      // console.log("simplified: ", simplified);
+      // console.log("neigborgoods: ", neighborhoods);
+
+      const response = await fetch("api/Serper", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ neighborhoods: neighborhoods }),
+      });
+
+      const data = await response.json();
+      // console.log("Notícias: ", data);
+
+      SecurityAnalitics(neighborhoods, simplified, data.results);
+    };
+
+    run();
   }, [coordinatesMatching]);
 
   // Clear from the map old occurrences circles
@@ -236,7 +301,6 @@ export default function Passenger({ routeGeoData, incidents }: MapProps) {
     map.fitBounds(bounds, { padding: 60, duration: 1000 });
   }
 
-  //  update dangerous zones
   //  Create or update the occurrences circles
   useEffect(() => {
     const map = mapRef.current;
@@ -255,10 +319,8 @@ export default function Passenger({ routeGeoData, incidents }: MapProps) {
       })),
     };
 
-    console.log("geojson : ", geojson);
-
     const paint = () => {
-      // if the source aready exist, only update teh datas
+      // if the source aready exist, only update the datas
       if (map.getSource("circles-source")) {
         (map.getSource("circles-source") as mapboxgl.GeoJSONSource).setData(
           geojson,
@@ -286,6 +348,48 @@ export default function Passenger({ routeGeoData, incidents }: MapProps) {
     if (map.isStyleLoaded()) paint();
     else map.once("load", paint);
   }, [occurrences]);
+
+  // distact a dangerous zone
+
+  useEffect(() => {
+    const map = mapRef.current;
+
+    if (!map) return;
+    if (!map) return;
+
+    const draw = () => {
+      if (riskZones == null || !riskZones.features.length) return;
+
+      map.addSource("risk-zones", {
+        type: "geojson",
+        data: riskZones,
+      });
+
+      map.addLayer({
+        id: "risk-fill",
+        type: "fill",
+        source: "risk-zones",
+        paint: {
+          "fill-color": "#C44545",
+          "fill-opacity": 0.3,
+        },
+      });
+
+      map.addLayer({
+        id: "risk-outline",
+        type: "line",
+        source: "risk-zones",
+        paint: {
+          "line-color": "#C44545",
+          "line-width": 2,
+        },
+      });
+    };
+
+    if (map.isStyleLoaded()) draw();
+    else map.on("load", draw);
+  }, [riskZones]);
+
   return (
     <section
       className="relative w-[95%] md:w-[95%] h-[20em] md:h-[30em] 

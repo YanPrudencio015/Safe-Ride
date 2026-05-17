@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { booleanPointInPolygon, point } from "@turf/turf";
 import type { Feature, Polygon, MultiPolygon, Geometry } from "geojson";
 
-type Incident = {
+export type Incident = {
   id: string;
   latitude: number;
   longitude: number;
