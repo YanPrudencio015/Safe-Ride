@@ -54,7 +54,7 @@ export function UseRiskZones(incidents: Incident[]) {
     if (!incidents.length) return;
 
     async function calculate() {
-      const res = await fetch("/geodata/rio.json");
+      const res = await fetch("/geojson/brasil.json");
       const neighborhoods: GeoJSON.FeatureCollection = await res.json();
 
       // Check all the polygons before use
@@ -84,6 +84,10 @@ export function UseRiskZones(incidents: Incident[]) {
         type: "FeatureCollection",
         features: affected,
       });
+      console.log(
+        "affected bairros:",
+        affected.map((f) => f.properties?.name),
+      );
     }
 
     calculate();

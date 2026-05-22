@@ -44,32 +44,76 @@ export async function POST(req: NextRequest) {
       prompt,
     }: RouteAnalyticsPayload = await req.json();
 
+    const cleanNews = neighborhoodNews
+      .filter((n: NewsBody) => {
+        const title = n.title?.toLocaleLowerCase() || "";
+        const content = n.fullContent?.toLocaleLowerCase() || "";
+        const keyWords = [
+          "assalt",
+          "roubo",
+          "sequestro",
+          "criminoso",
+          "tráfico",
+          "operação",
+          "confronto",
+          "rendido",
+          "motorista",
+          "entregador",
+        ];
+        return keyWords.some((p) => title.includes(p) || content.includes(p));
+      })
+      .map((n: NewsBody) => ({
+        neighborhood: n.neighborhood,
+        title: n.title,
+        content: n.fullContent?.slice(0, 400),
+      }));
+
+    const userPrompt = `
+BAIRROS DA ROTA: ${JSON.stringify(neighborhoodNames)}
+ 
+COORDENADAS (mesma ordem dos bairros): ${JSON.stringify(neighborhoodCoordinates)}
+ 
+NOTÍCIAS FILTRADAS:
+${cleanNews
+  .map(
+    (n) =>
+      `- Bairro: ${n.neighborhood}\n  Título: ${n.title}\n  Conteúdo: ${n.content}`,
+  )
+  .join("\n\n")}
+ 
+Analise e retorne o JSON conforme instruído.
+`;
+
     const systemInstruction = `
-Você é um assistente de segurança para motoristas, entregadores e passageiros.
-
-TAREFA:
-Compare os bairros em ${neighborhoodNames} com as notícias em ${neighborhoodNews}.
-Identifique bairros com histórico de barricadas, restrições a motoristas/entregadores ou alto índice de roubos.
-
-RESPOSTA:
-- Se houver risco: alerte sobre o bairro específico em tom formal e corporativo.
-- Se não houver risco: responda "Rota aparentemente segura, boa viagem."
-- Cada coordenada em ${neighborhoodCoordinates} corresponde ao bairro de mesmo índice em ${neighborhoodNames}.
-
+Você é um assistente de segurança para motoristas, entregadores e passageiros no Brasil.
+ 
+Você receberá notícias filtradas sobre bairros de uma rota.
+Sua tarefa é identificar quais bairros representam risco real para quem trafega por eles.
+ 
+CRITÉRIO DE RISCO — considere risco confirmado se a notícia mencionar:
+- Assalto, roubo, sequestro ou tentativa contra motoristas ou entregadores
+- Confronto armado, operação policial ou tiroteio na via
+- Restrição de acesso por facções ou tráfico
+ 
 REGRAS:
-- Não mencione bairros sem risco confirmado.
-- Não invente locais.
-- Sem listas. Um parágrafo único, máximo 30 palavras.
-
-FORMATO JSON ESTRITO:
+- Só cite bairros com risco nas notícias fornecidas. Nunca invente.
+- Notícias antigas (mais de 2 anos) contam como histórico de risco — mencione como tal.
+- Tom formal e corporativo. Um parágrafo único, máximo 40 palavras.
+- Se nenhum bairro tiver risco confirmado: retorne "Rota aparentemente segura, boa viagem."
+ 
+RETORNE APENAS JSON VÁLIDO, SEM TEXTO FORA DO JSON:
 {
-  "mensagem": "parágrafo único, formal, máx 30 palavras",
-  "neigh": ["nomes dos bairros de risco"],
+  "mensagem": "parágrafo único formal, máx 40 palavras",
+  "neigh": ["nomes exatos dos bairros de risco, conforme recebidos"],
   "coordenadas_risco": [{ "lat": número, "lng": número }]
 }
-
-Mantenha as coordenadas exatamente como fornecidas em ${neighborhoodCoordinates}.
 `;
+    type NewsBody = {
+      neighborhood: string;
+      title: string;
+      fullContent: string;
+    };
+
     const genIA = new GoogleGenerativeAI(apiKey);
     const model = genIA.getGenerativeModel({
       // model: "gemini-2.5-flash-lite",
@@ -79,18 +123,21 @@ Mantenha as coordenadas exatamente como fornecidas em ${neighborhoodCoordinates}
     });
 
     // 2. Uso da função de retry
-    const result = await generateWithRetry(
-      model,
-      prompt || "Analise as coordenadas.",
-    );
+    // 5. Chama o modelo com o prompt do usuário
+    const result = await generateWithRetry(model, userPrompt);
     const response = await result.response;
     const parsedResponse = JSON.parse(response.text());
+
     const alertaTexto = parsedResponse.mensagem;
     const bairrosPerigosos = parsedResponse.neigh;
 
     const coordsFiltradas = neighborhoodNames
-      .map((nome, index) => ({ nome, coord: neighborhoodCoordinates[index] }))
-      .filter((item) => bairrosPerigosos.includes(item.nome));
+      .map((nome: string, index: number) => ({
+        nome,
+        coord: neighborhoodCoordinates[index],
+      }))
+      .filter((item: { nome: string }) => bairrosPerigosos.includes(item.nome));
+
     return NextResponse.json({
       result: [alertaTexto, coordsFiltradas],
     });

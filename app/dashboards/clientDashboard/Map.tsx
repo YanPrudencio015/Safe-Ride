@@ -162,7 +162,7 @@ export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
     const data = await response.json();
     if (!response.ok) throw new Error(data.details || "Erro na API");
 
-    // console.log("resposta do Gemini: ", data);
+    console.log("resposta do Gemini: ", data);
 
     const allCords = data.result[1].map((coords: any) => coords.coord);
     const incidents = allCords.map(
@@ -218,7 +218,7 @@ export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
       );
 
       // console.log("simplified: ", simplified);
-      // console.log("neigborgoods: ", neighborhoods);
+      console.log("neigborgoods: ", neighborhoods);
 
       const response = await fetch("api/Serper", {
         method: "POST",
@@ -227,7 +227,7 @@ export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
       });
 
       const data = await response.json();
-      // console.log("Notícias: ", data);
+      console.log("Notícias: ", data);
 
       SecurityAnalitics(neighborhoods, simplified, data.results);
     };
@@ -349,7 +349,7 @@ export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
     else map.once("load", paint);
   }, [occurrences]);
 
-  // distact a dangerous zone
+  // distact dangerous zones
 
   useEffect(() => {
     const map = mapRef.current;
@@ -359,11 +359,11 @@ export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
 
     const draw = () => {
       if (riskZones == null || !riskZones.features.length) return;
+      if (map.getLayer("risk-outline")) map.removeLayer("risk-outline");
+      if (map.getLayer("risk-fill")) map.removeLayer("risk-fill");
+      if (map.getSource("risk-zones")) map.removeSource("risk-zones");
 
-      map.addSource("risk-zones", {
-        type: "geojson",
-        data: riskZones,
-      });
+      map.addSource("risk-zones", { type: "geojson", data: riskZones });
 
       map.addLayer({
         id: "risk-fill",
@@ -387,8 +387,13 @@ export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
     };
 
     if (map.isStyleLoaded()) draw();
-    else map.on("load", draw);
+    else map.once("style.load", draw);
   }, [riskZones]);
+
+  useEffect(() => {
+    console.log("riskZones:", riskZones);
+    console.log("riskCoords:", riskCoords);
+  }, [riskZones, riskCoords]);
 
   return (
     <section
@@ -398,7 +403,7 @@ export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
       <div ref={MapContainerRef} className="w-full h-full" />
 
       {/* Loading indicator while fetching occurrences */}
-      {occLoading && (
+      {riskZones && occLoading && (
         <div
           style={{
             position: "absolute",
@@ -428,12 +433,12 @@ export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
               animation: "pulse-dot 1s infinite",
             }}
           />
-          Verificando ocorrências na rota…
+          Analizando rota...
         </div>
       )}
 
       {/* Alert banner when occurrences found */}
-      {!occLoading && occurrences.length > 0 && (
+      {!riskZones && !occLoading && occurrences.length > 0 && (
         <div
           style={{
             position: "absolute",
