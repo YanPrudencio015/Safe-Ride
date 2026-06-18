@@ -12,7 +12,7 @@ const BLOCKED_DOMAINS = [
 ];
 
 // ------ remove Social media URLs ----------------------------
-function isScrapable(url: string): boolean {
+export function isScrapable(url: string): boolean {
   const { hostname } = new URL(url);
   try {
     return !BLOCKED_DOMAINS.some((domains) => hostname.includes(domains));
@@ -22,10 +22,10 @@ function isScrapable(url: string): boolean {
 }
 
 //  ----- Use JINA IA to reads the news content and return it ------------------------
-async function fetchPagesContent(url: string): Promise<string | null> {
+export async function fetchPagesContent(url: string): Promise<string | null> {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
+    const timeout = setTimeout(() => controller.abort(), 1500);
 
     const response = await fetch(`https://r.jina.ai/${url}`, {
       headers: { Accept: "text/plain" },
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
           ? data.organic.filter((e: any) => isScrapable(e.link))
           : [];
 
-        // putting more information for this especific neigbor
+        // putting more information for this especific neighbor
         const enriched = await Promise.all(
           filtered.map(async (e: any) => {
             const fullContent = await fetchPagesContent(e.link);

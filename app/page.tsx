@@ -6,7 +6,7 @@ import { faLocationCrosshairs } from "@fortawesome/free-solid-svg-icons";
 import Form from "next/form";
 import { Rubik } from "next/font/google";
 import { Roboto } from "next/font/google";
-import Passenger from "./dashboards/clientDashboard/Map";
+import Passenger from "./dashboards/clientDashboard/passangerMap";
 import FormClient from "./components/FormClient";
 import SafeRideForm from "./SafeRideApp";
 

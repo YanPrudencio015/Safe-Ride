@@ -1,4 +1,4 @@
-import { GetAPIToken } from "@/app/hook/APIAcess";
+import { GetAPIToken } from "@/app/server/APIAcess";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {

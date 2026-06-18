@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { json } from "stream/consumers";
 import Home from "./page";
-import PassengerMAP from "./dashboards/clientDashboard/Map";
-import { GetAPIToken } from "./hook/APIAcess";
+import PassengerMAP from "./dashboards/clientDashboard/passangerMap";
+import { GetAPIToken } from "./server/APIAcess";
 
 import dynamic from "next/dynamic";
 

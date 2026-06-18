@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { GetAPIToken } from "@/app/hook/APIAcess";
+import { GetAPIToken } from "@/app/server/APIAcess";
 
 export async function GET(request: Request) {
   const token = await GetAPIToken();

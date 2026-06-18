@@ -2,7 +2,7 @@
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useEffect, useRef, useState } from "react";
-import { getNeighborhoodsFromRoute } from "@/app/hook/RouteNeighbor";
+import { getNeighborhoodsFromRoute } from "@/app/server/RouteNeighbor";
 import { UseRiskZones, Incident } from "@/app/hook/useRiskZones";
 import {
   useRouteOccurrences,
@@ -18,6 +18,8 @@ type MapProps = {
 import type { NewsItem, RouteAnalyticsPayload } from "@/app/types/route";
 const SOURCE_ID = "risk-zones";
 const OCCURRENCE_LAYER_ID = "route-occurrences";
+
+import { GeminiResponse } from "@/app/api/gemini/route";
 
 export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -153,16 +155,16 @@ export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
       neighborhoodNews: news,
       prompt: "Analiza se são bairros seguros",
     };
-    const response = await fetch("api/gemini", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    // const response = await fetch("api/gemini", {
+    //   method: "POST",
+    //   headers: { "Content-Type": "application/json" },
+    //   body: JSON.stringify(payload),
+    // });
+    const data = await GeminiResponse(payload);
 
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.details || "Erro na API");
-
-    console.log("resposta do Gemini: ", data);
+    if (!data.result) {
+      return;
+    }
 
     const allCords = data.result[1].map((coords: any) => coords.coord);
     const incidents = allCords.map(
@@ -173,11 +175,7 @@ export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
       }),
     );
 
-    setRiskCoords(incidents);
-
-    if (!data.result) {
-      // Aqui você atualiza um estado (state) para exibir na tela
-    }
+    // setRiskCoords(incidents);
   }
 
   // --- React to new externals route data -----------------------------------
@@ -209,16 +207,49 @@ export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
     }
 
     drawRoute(map, coordinatesMatching);
+    // ----------------------------
+    // ----------------------------
+    // ----------------------------
+    // ----------------------------
+    // ----------------------------
+    // ---------------------------- searching neighborhoods news
+    // ----------------------------
+    // ----------------------------
+    // ----------------------------
 
-    // ------------------------- searching neighborhoods news ------------------------------
     const run = async () => {
       const { neighborhoods, simplified } = await getNeighborhoodsFromRoute(
         coordinatesMatching.coordinates,
         process.env.NEXT_PUBLIC_MAP_TOKEN!,
       );
+      setRiskCoords([]);
+      const newResponse = await fetch("api/pipeline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ coordinates: coordinatesMatching.coordinates }),
+      });
 
-      // console.log("simplified: ", simplified);
-      console.log("neigborgoods: ", neighborhoods);
+      const GeminiData = await newResponse.json();
+
+      // console.log("Testando novo caminho: ", GeminiData);
+
+      if (!GeminiData.GeminiResponded?.result) {
+        console.warn("Gemini não retornou resultado");
+        return;
+      }
+
+      const allCords = GeminiData.GeminiResponded?.result[1].map(
+        (coords: any) => coords.coord,
+      );
+      const incidents = allCords.map(
+        ([lng, lat]: [number, number], index: number) => ({
+          id: String(index),
+          latitude: lat,
+          longitude: lng,
+        }),
+      );
+
+      setRiskCoords(incidents);
 
       const response = await fetch("api/Serper", {
         method: "POST",
@@ -227,7 +258,6 @@ export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
       });
 
       const data = await response.json();
-      console.log("Notícias: ", data);
 
       SecurityAnalitics(neighborhoods, simplified, data.results);
     };
@@ -349,19 +379,23 @@ export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
     else map.once("load", paint);
   }, [occurrences]);
 
-  // distact dangerous zones
+  //  --------------------------------------------------------------
+  //  --------------------------------------------------------------
+  //  --------------------------------------------------------------
+  //  --------------------------------------------------------------
+  // to highlight the neighborhood on map after gemini check the rote
 
   useEffect(() => {
     const map = mapRef.current;
 
     if (!map) return;
-    if (!map) return;
 
     const draw = () => {
-      if (riskZones == null || !riskZones.features.length) return;
       if (map.getLayer("risk-outline")) map.removeLayer("risk-outline");
       if (map.getLayer("risk-fill")) map.removeLayer("risk-fill");
       if (map.getSource("risk-zones")) map.removeSource("risk-zones");
+
+      if (!riskZones || !riskZones.features.length) return;
 
       map.addSource("risk-zones", { type: "geojson", data: riskZones });
 
@@ -389,11 +423,6 @@ export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
     if (map.isStyleLoaded()) draw();
     else map.once("style.load", draw);
   }, [riskZones]);
-
-  useEffect(() => {
-    console.log("riskZones:", riskZones);
-    console.log("riskCoords:", riskCoords);
-  }, [riskZones, riskCoords]);
 
   return (
     <section

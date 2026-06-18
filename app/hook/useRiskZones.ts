@@ -84,10 +84,6 @@ export function UseRiskZones(incidents: Incident[]) {
         type: "FeatureCollection",
         features: affected,
       });
-      console.log(
-        "affected bairros:",
-        affected.map((f) => f.properties?.name),
-      );
     }
 
     calculate();

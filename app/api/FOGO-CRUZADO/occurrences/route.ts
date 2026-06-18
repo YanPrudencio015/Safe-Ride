@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { GetAPIToken } from "@/app/hook/APIAcess";
+import { GetAPIToken } from "@/app/server/APIAcess";
 
 export async function POST(request: Request) {
   try {
