@@ -1,8 +1,8 @@
 import { NextResponse, NextRequest } from "next/server";
 import { isScrapable, fetchPagesContent } from "../Serper/route";
 import { RouteAnalyticsPayload } from "@/app/types/route";
-import { GeminiResponse } from "../gemini/route";
 import { getNeighborhoodsFromRoute } from "../../server/RouteNeighbor";
+import { GeminiResponse } from "@/app/lib/GeminiResponse";
 
 import { Redis } from "@upstash/redis";
 

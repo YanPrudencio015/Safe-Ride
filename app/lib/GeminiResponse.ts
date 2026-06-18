@@ -1,5 +1,4 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { NextRequest, NextResponse } from "next/server";
 
 // some type to avoid repeat more than one struture
 import type { RouteAnalyticsPayload } from "@/app/types/route";

@@ -19,7 +19,7 @@ import type { NewsItem, RouteAnalyticsPayload } from "@/app/types/route";
 const SOURCE_ID = "risk-zones";
 const OCCURRENCE_LAYER_ID = "route-occurrences";
 
-import { GeminiResponse } from "@/app/api/gemini/route";
+import { GeminiResponse } from "@/app/lib/GeminiResponse";
 
 export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
   const mapRef = useRef<mapboxgl.Map | null>(null);
