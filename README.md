@@ -8,9 +8,9 @@
 
 ## O problema
 
-No Rio de Janeiro, ocorrências de violência afetam trajetos urbanos todos os dias. Motoristas de aplicativo são abordados em zonas de risco. Motoboys e entregadores enfrentam restrições em comunidades. Carros particulares são impedidos de entrar em certas áreas.
+No Brasil, ocorrências de violência afetam trajetos urbanos todos os dias. Motoristas de aplicativo são abordados em zonas de risco, motoboys e entregadores enfrentam restrições em comunidades, carros particulares são impedidos de entrar em certas áreas.
 
-Esse problema não é exclusivo do Rio — está presente em boa parte do Brasil.
+Esse problema está presente em boa parte do território brasileiro.
 
 O Safe Ride consome a API do Fogo Cruzado e plota ocorrências diretamente no mapa, dando ao usuário uma visão geográfica clara dos riscos na região. Para superar a limitação geográfica dessa API, o projeto evolui para uma camada de inteligência artificial capaz de monitorar notícias em tempo real em qualquer estado do país.
 
@@ -20,16 +20,17 @@ O Safe Ride consome a API do Fogo Cruzado e plota ocorrências diretamente no ma
 
 - Mapa interativo com marcadores de ocorrências em tempo real
 - Autenticação com a API do Fogo Cruzado para consumo de dados reais de segurança
-- **Pipeline de IA para análise de risco por bairro ao longo da rota** *(em desenvolvimento)*
+- Pipeline de IA para análise de risco por bairro ao longo da rota
 - Deploy contínuo via Netlify com pipeline de CI/CD configurado
 
 ---
 
-## 🧠 O desafio técnico: do trajeto ao alerta inteligente
+## 🧠 O desafios técnicos: 
+**Do trajeto ao alerta inteligente**
 
 ### Situação
 
-Ao traçar uma rota, o sistema precisa identificar quais bairros o usuário vai cruzar e verificar se há ocorrências recentes ou histórico de risco nessas áreas — devolvendo alertas personalizados para motoristas, entregadores e passageiros.
+Ao traçar uma rota, o sistema precisa identificar quais bairros o passageiro com motorista ou motoboys vão cruzar durante o percurso e verificar se há ocorrências recentes ou histórico de risco nessas áreas — devolvendo alertas personalizados para os usuários.
 
 ### Problema
 
@@ -74,6 +75,47 @@ A pipeline entrega bairros precisos, notícias reais e análise contextual — s
 
 ---
 
+## ⚡ Otimização de Performance da Pipeline
+
+### Situação
+A pipeline de análise de rotas retornava resultados em 13 a 20 segundos — 
+tempo suficiente para distrair um motorista em movimento ou fazer um 
+passageiro abandonar o app antes mesmo de iniciar uma corrida.
+
+Além disso, ferramentas como Gemini e Jina possuem limites de uso diário 
+e mensal. Múltiplos usuários pesquisando o mesmo bairro consumiriam 
+chamadas desnecessárias de API para um resultado que já havia sido calculado.
+
+### Problema
+Três gargalos identificados via logs de tempo:
+
+- **Gemini:** responsável por 9 dos 12 segundos totais
+- **Jina:** lendo URLs sequencialmente por bairro em vez de em paralelo
+- **Arquitetura:** todas as requisições no client side, impossibilitando 
+  o uso de cache com Redis (que só funciona no servidor)
+
+### Solução
+
+**1 — Unificação no server side**
+Movi todas as requisições do client side para um arquivo único 
+`pipeline/route.ts` no servidor. Isso permitiu implementar a 
+verificação de cache antes de qualquer chamada de API.
+
+**2 — Cache com Redis/Upstash**
+Implementei cache com TTL de 24 horas. Rotas já consultadas retornam 
+o resultado salvo sem executar a pipeline — eliminando consumo 
+desnecessário de Serper, Jina e Gemini.
+
+**3 — Paralelização do Jina**
+Em vez de ler URLs sequencialmente por bairro, passei a coletar todos 
+os links de todos os bairros e disparar todas as leituras em paralelo 
+com `Promise.all` de uma vez só.
+## Resultado:
+ao fazer a pesquisa após esses ajustes, o custo de tempo foi de 13 a 20 segundos para 6 a 8 segundos. Melhoria na performance da  implementação da feature de identificação de local seguro para rápido embarque e desembarque em zonas categorizadas como perigosas
+ 
+
+---
+
 ## 🛠 Stack e decisões técnicas
 
 | Tecnologia | Por que foi escolhida |
@@ -91,7 +133,7 @@ A pipeline entrega bairros precisos, notícias reais e análise contextual — s
 
 ## ⚙️ Rodando localmente
 
-**Pré-requisitos:** Node.js 18+, conta no Mapbox, credenciais na API do Fogo Cruzado
+**Pré-requisitos:** Node.js 18+, conta no Mapbox, credenciais na API do Fogo Cruzado, credenciais no Gemini, Credenciais Serper
 
 ```bash
 git clone https://github.com/YanPrudencio015/Safe-Ride
@@ -105,6 +147,10 @@ Crie um `.env.local` na raiz:
 NEXT_PUBLIC_MAPBOX_TOKEN=seu_token_aqui
 FOGO_CRUZADO_EMAIL=seu_email_aqui
 FOGO_CRUZADO_PASSWORD=sua_senha_aqui
+GEMINI_API_KEY=sua_api_aqui
+SERPER_API=sua_api_aqui
+UPSTASH_REDIS_REST_URL=url_aqui
+UPSTASH_REDIS_REST_TOKEN=seu_token_aqui
 ```
 
 > ⚠️ As credenciais do Fogo Cruzado são usadas **apenas no servidor** (Server Components). Nunca exponha essas variáveis com o prefixo `NEXT_PUBLIC_`.
