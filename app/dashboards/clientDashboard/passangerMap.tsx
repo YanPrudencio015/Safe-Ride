@@ -2,7 +2,6 @@
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useEffect, useRef, useState } from "react";
-import { getNeighborhoodsFromRoute } from "@/app/server/RouteNeighbor";
 import { UseRiskZones, Incident } from "@/app/hook/useRiskZones";
 import {
   useRouteOccurrences,
@@ -18,8 +17,6 @@ type MapProps = {
 import type { NewsItem, RouteAnalyticsPayload } from "@/app/types/route";
 const SOURCE_ID = "risk-zones";
 const OCCURRENCE_LAYER_ID = "route-occurrences";
-
-import { GeminiResponse } from "@/app/lib/GeminiResponse";
 
 export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -144,40 +141,6 @@ export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
 
   // --- Gemini -------------------------------------------------------
 
-  async function SecurityAnalitics(
-    neighborhoods: string[],
-    coordinates: number[][],
-    news: NewsItem[],
-  ) {
-    const payload: RouteAnalyticsPayload = {
-      neighborhoodNames: neighborhoods,
-      neighborhoodCoordinates: coordinates,
-      neighborhoodNews: news,
-      prompt: "Analiza se são bairros seguros",
-    };
-    // const response = await fetch("api/gemini", {
-    //   method: "POST",
-    //   headers: { "Content-Type": "application/json" },
-    //   body: JSON.stringify(payload),
-    // });
-    const data = await GeminiResponse(payload);
-
-    if (!data.result) {
-      return;
-    }
-
-    const allCords = data.result[1].map((coords: any) => coords.coord);
-    const incidents = allCords.map(
-      ([lng, lat]: [number, number], index: number) => ({
-        id: String(index),
-        latitude: lat,
-        longitude: lng,
-      }),
-    );
-
-    // setRiskCoords(incidents);
-  }
-
   // --- React to new externals route data -----------------------------------
 
   useEffect(() => {
@@ -218,29 +181,28 @@ export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
     // ----------------------------
 
     const run = async () => {
-      const { neighborhoods, simplified } = await getNeighborhoodsFromRoute(
-        coordinatesMatching.coordinates,
-        process.env.NEXT_PUBLIC_MAP_TOKEN!,
-      );
       setRiskCoords([]);
-      const newResponse = await fetch("api/pipeline", {
+
+      const res = await fetch("/api/route-analysis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ coordinates: coordinatesMatching.coordinates }),
       });
 
-      const GeminiData = await newResponse.json();
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("route-analysis falhou:", res.status, text);
+        return;
+      }
 
-      // console.log("Testando novo caminho: ", GeminiData);
+      const data = await res.json();
 
-      if (!GeminiData.GeminiResponded?.result) {
+      if (!data.GeminiResponded?.result) {
         console.warn("Gemini não retornou resultado");
         return;
       }
 
-      const allCords = GeminiData.GeminiResponded?.result[1].map(
-        (coords: any) => coords.coord,
-      );
+      const allCords = data.GeminiResponded.result[1].map((c: any) => c.coord);
       const incidents = allCords.map(
         ([lng, lat]: [number, number], index: number) => ({
           id: String(index),
@@ -250,16 +212,6 @@ export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
       );
 
       setRiskCoords(incidents);
-
-      const response = await fetch("api/Serper", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ neighborhoods: neighborhoods }),
-      });
-
-      const data = await response.json();
-
-      SecurityAnalitics(neighborhoods, simplified, data.results);
     };
 
     run();
