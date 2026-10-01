@@ -8,7 +8,7 @@ import { Rubik } from "next/font/google";
 import { Roboto } from "next/font/google";
 import Passenger from "./dashboards/clientDashboard/passangerMap";
 import FormClient from "./components/FormClient";
-import SafeRideForm from "./SafeRideApp";
+import SafeRideForm from "./SafeRideMainPage";
 
 const rubik = Rubik({
   subsets: ["latin"],
@@ -19,7 +19,7 @@ const roboto = Roboto({
 
 export default function Home() {
   return (
-    <div className="bg-[#FFF6F6] relative w-full h-screen flex justify-center items-center border-0 outline-0">
+    <div className="bg-[#272727] relative w-full h-screen flex justify-center items-center border-0 outline-0">
       {/* button to search for a driver */}
       <SafeRideForm />
     </div>

@@ -1,18 +1,25 @@
+
+import Form from "next/form";
+import { useEffect, useRef, useState } from "react";
+// fontAwesome
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faLocationDot } from "@fortawesome/free-solid-svg-icons";
 import { faClose } from "@fortawesome/free-solid-svg-icons";
 import { faBars } from "@fortawesome/free-solid-svg-icons";
 import { faLocationCrosshairs } from "@fortawesome/free-solid-svg-icons";
-
-import Form from "next/form";
+// google fonts
 import { Rubik } from "next/font/google";
 import { Roboto } from "next/font/google";
-import { useState } from "react";
 
-// to generate suggestions when the user types an address.
-
-// 1.
+// componets
+import ClientMapRoute from "../lib/mapbox/ClientMapRoute";
+import DrawingRoute from "../lib/mapbox/DrawingRoute";
+import { useRouteOccurrences } from "../hook/useRouteOccurrences";
 import { SearchBox } from "@mapbox/search-js-react";
+import renderOccurrencesCircles from "../lib/mapbox/OccurrencesCicles";
+import { UseRiskZones, Incident } from "../hook/useRiskZones";
+import DangerousZone from "../lib/pipeline/neighborhoodsNews";
+import { useMapRiskZones } from "../hook/dangerousNeighborhoods/useMapRiskZones";
 const token = process.env.NEXT_PUBLIC_MAP_TOKEN;
 
 const rubik = Rubik({
@@ -22,13 +29,120 @@ const roboto = Roboto({
   subsets: ["latin"],
 });
 
-type FormProps = {
-  onSubmit: (origin: string, destination: string) => void;
+type MapProps = {
+  mapRef: React.RefObject<mapboxgl.Map | null>;
+  occurrenceMarkersRef: React.RefObject<mapboxgl.Marker[]>;
+  markRef: React.RefObject<mapboxgl.Marker[]>;
+  pendingRouteRef: React.RefObject<GeoJSON.LineString | null>;
 };
 
-export default function FormClient({ onSubmit }: FormProps) {
+export default function FormClient({
+  mapRef,
+  occurrenceMarkersRef,
+  markRef,
+  pendingRouteRef,
+}: MapProps) {
   const [origin, setOrigin] = useState("");
   const [destination, setDestination] = useState("");
+  const [DestinationCoordinates, SetdesinationCoordinates] =
+    useState<number[]>();
+  const [OriginCoordinates, SetOriginCoordinates] = useState<number[]>();
+  const mapMark = useRef<mapboxgl.Marker[]>([]);
+  const [riskCoords, setRiskCoords] = useState<Incident[]>([]);
+  const [coordinates, setCoordinates] = useState<[number, number][]>([]);
+  const [coordinatesMatching, setcoordinatesMatching] =
+    useState<GeoJSON.LineString | null>(null);
+  const riskZones = UseRiskZones(riskCoords);
+
+  const { occurrences, loading: occLoading } =
+    useRouteOccurrences(coordinatesMatching);
+
+  function AllCoordinates() {
+    if (OriginCoordinates && DestinationCoordinates) {
+      setCoordinates([
+        OriginCoordinates as [number, number],
+        DestinationCoordinates as [number, number],
+      ]);
+    }
+  }
+
+  useEffect(() => {
+    async function test() {
+      if (!mapRef) return;
+
+      if (coordinates.length !== 2) return;
+
+      const waitForMap = () =>
+        new Promise<void>((resolve) => {
+          if (mapRef.current?.isStyleLoaded()) {
+            resolve();
+          } else {
+            mapRef.current?.once("style.load", () => resolve());
+          }
+        });
+
+      await waitForMap();
+      const result = await ClientMapRoute({ coordinates, mapRef });
+      setcoordinatesMatching(result);
+      if (!result) return;
+
+      DrawingRoute(mapRef.current, result);
+    }
+
+    test();
+  }, [coordinates]);
+
+  // Cleans up occurrence markers when occurrences change
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map && !markRef) return;
+    occurrenceMarkersRef.current.forEach((m) => m.remove());
+    occurrenceMarkersRef.current = [];
+    markRef.current.forEach((m) => m.remove());
+    if (!occurrences.length) return;
+  }, [occurrences]);
+
+  // Renders pulsing circles from Fogo Cruzado occurrences on the map
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !occurrences.length) return;
+    const cleanup = renderOccurrencesCircles({ occurrences, map });
+    return cleanup;
+  }, [occurrences]);
+
+  // runs the pipeline
+  useEffect(() => {
+    if (!coordinatesMatching) return;
+
+    const map = mapRef.current;
+
+    if (!map || !map.isStyleLoaded()) {
+      pendingRouteRef.current = coordinatesMatching;
+
+      DrawingRoute(map, coordinatesMatching);
+
+      const run = async () => {
+        setRiskCoords([]);
+        const result = await DangerousZone({
+          setRiskCoords,
+          coordinatesMatching,
+        });
+
+        if (result?.incidents) {
+          setRiskCoords(result.incidents);
+        }
+
+        if (result?.GeminiResponseText) {
+          console.log("Gemini response:", result.GeminiResponseText);
+        }
+      };
+
+      run();
+    }
+  }, [coordinatesMatching]);
+
+  // Highlights dangerous neighborhoods identified by Gemini
+  useMapRiskZones({ mapRef, riskZones });
 
   return (
     <div
@@ -57,7 +171,8 @@ export default function FormClient({ onSubmit }: FormProps) {
             onChange={(value) => setOrigin(value)}
             onRetrieve={(res) => {
               const coords = res.features[0].geometry.coordinates;
-              setOrigin(res.features[0].properties.full_address);
+              // setOrigin(res.features[0].properties.full_address);
+              SetOriginCoordinates(coords);
             }}
             options={{
               language: "pt",
@@ -76,7 +191,8 @@ export default function FormClient({ onSubmit }: FormProps) {
             onChange={(value) => setDestination(value)}
             onRetrieve={(res) => {
               const coords = res.features[0].geometry.coordinates;
-              setDestination(res.features[0].properties.full_address);
+              // setDestination(res.features[0].properties.full_address);
+              SetdesinationCoordinates(coords);
             }}
             options={{
               language: "pt",
@@ -89,7 +205,10 @@ export default function FormClient({ onSubmit }: FormProps) {
         className={` w-[90%] h-[3em] rounded-[5em] z-10
       bg-[#075B5E] active:scale-95 transition-all duration-200
       ease-in-out text-white ${rubik.className}`}
-        onClick={() => onSubmit(origin, destination)}
+        onClick={() => {
+          mapMark.current.forEach((m) => m.remove());
+          AllCoordinates();
+        }}
       >
         SEARCH A DRIVER
       </button>

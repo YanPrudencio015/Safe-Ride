@@ -46,7 +46,7 @@ export async function POST(request: Request) {
   const key = process.env.SERPER_API;
 
   try {
-    // 1. separing "neighborhoods" as a array
+    //separing "neighborhoods" as a array
     const { neighborhoods }: { neighborhoods: string[] } = await request.json();
     if (!neighborhoods || !Array.isArray(neighborhoods)) {
       return NextResponse.json(
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. mapping each neigborhood for a search promise
+    //mapping each neigborhood for a search promise
     const allResults = await Promise.all(
       neighborhoods.map(async (neighborhood) => {
         const options = {
@@ -97,7 +97,7 @@ export async function POST(request: Request) {
       }),
     );
 
-    // 3. Flatten (achatar) o array para retornar uma lista única de notícias
+    //Flatten (achatar) o array para retornar uma lista única de notícias
     return NextResponse.json({ results: allResults.flat() });
   } catch (error) {
     return NextResponse.json({ error: "Erro ao processar" }, { status: 500 });

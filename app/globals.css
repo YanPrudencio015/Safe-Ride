@@ -1,13 +1,13 @@
 @import "tailwindcss";
-/* 
+
 * {
   transition-property: all;
-  transition-duration: 600ms;
+  transition-duration: 100ms;
   transition-timing-function: ease-in-out;
-} */
+}
 
 :root {
-  --background: #ffffff;
+  --background: #091413;
   --foreground: #171717;
 }
 
@@ -49,3 +49,5 @@ body {
 .animate-pulse-red {
   animation: pulse-red 2s infinite;
 }
+
+

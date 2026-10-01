@@ -13,8 +13,6 @@ const files = fs
       !f.includes("brasil"),
   );
 
-console.log(`Mergeando ${files.length} arquivos...`);
-
 const allFeatures = files.flatMap((file) => {
   const content = JSON.parse(
     fs.readFileSync(path.join(geodataDir, file), "utf-8"),
@@ -29,5 +27,3 @@ fs.writeFileSync(
     features: allFeatures,
   }),
 );
-
-console.log(`brasil.json criado com ${allFeatures.length} features!`);

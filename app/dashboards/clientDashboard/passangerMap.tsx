@@ -1,31 +1,32 @@
 "use client";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
-import { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { UseRiskZones, Incident } from "@/app/hook/useRiskZones";
-import {
-  useRouteOccurrences,
-  type Occurrence,
-} from "@/app/hook/useRouteOccurrences";
+import { useRouteOccurrences } from "@/app/hook/useRouteOccurrences";
+import MapboxClient from "@/app/lib/mapbox/ClientMap";
+import { useMapClickMarker } from "@/app/hook/mapbox/ClientMapMarker";
+import DangerousZone from "@/app/lib/pipeline/neighborhoodsNews";
+import ClientMapRoute from "@/app/lib/mapbox/ClientMapRoute";
+import renderOccurrencesCircles from "@/app/lib/mapbox/OccurrencesCicles";
+import { useMapRiskZones } from "@/app/hook/dangerousNeighborhoods/useMapRiskZones";
 
-// types
 type MapProps = {
-  routeGeoData: GeoJSON.LineString | null;
-  incidents: { id: string; latitude: number; longitude: number }[];
+  mapRef: React.RefObject<mapboxgl.Map | null>;
+  occurrenceMarkersRef: React.RefObject<mapboxgl.Marker[]>;
+  markRef: React.RefObject<mapboxgl.Marker[]>;
+  pendingRouteRef: React.RefObject<GeoJSON.LineString | null>;
 };
 
-import type { NewsItem, RouteAnalyticsPayload } from "@/app/types/route";
-const SOURCE_ID = "risk-zones";
-const OCCURRENCE_LAYER_ID = "route-occurrences";
-
-export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
-  const mapRef = useRef<mapboxgl.Map | null>(null);
+export default function PassengerMap({
+  mapRef,
+  occurrenceMarkersRef,
+  markRef,
+  pendingRouteRef,
+}: MapProps) {
   const MapContainerRef = useRef<HTMLDivElement>(null);
-  const pendingRouteRef = useRef<GeoJSON.LineString | null>(null);
-  const occurrenceMarkersRef = useRef<mapboxgl.Marker[]>([]);
+
   const [riskCoords, setRiskCoords] = useState<Incident[]>([]);
-  const riskZones = UseRiskZones(riskCoords);
-  const markRef = useRef<mapboxgl.Marker[]>([]);
   const [coordinatesMatching, setcoordinatesMatching] =
     useState<GeoJSON.LineString | null>(null);
   const [moveEvent, setMoveEvent] = useState<mapboxgl.MapMouseEvent | null>(
@@ -34,135 +35,59 @@ export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
   const [coordinates, setCoordinates] = useState<[number, number][]>([]);
   const [MarkCount, setMarkCount] = useState(0);
 
-  // Fetch occurrences near the current route
-  const { occurrences, loading: occLoading } = useRouteOccurrences(
-    routeGeoData || coordinatesMatching,
-  );
+  const riskZones = UseRiskZones(riskCoords);
 
-  // --- before all, start the map from MAPBOX ---------------
-  // this way avoid errors that needs the map loaded
+  const { occurrences, loading: occLoading } =
+    useRouteOccurrences(coordinatesMatching);
+
+  // Initializes the Mapbox map instance.
+  // Returns a cleanup function that removes the map on unmount.
   useEffect(() => {
-    if (!MapContainerRef.current) return;
-
-    mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAP_TOKEN!;
-    mapRef.current = new mapboxgl.Map({
-      // Map Creation
-      container: MapContainerRef.current,
-      style: "mapbox://styles/mapbox/streets-v12",
-      center: [-43.25296155409677, -22.87598557368733],
-      zoom: 9,
+    return MapboxClient({
+      MapContainerRef,
+      mapRef,
+      pendingRouteRef,
+      drawRoute,
     });
-
-    // Here, I check if has a data for route before load the map. If yes, I can't call DrawRoute, Then, I
-    // save the data inside pendingRouteRef, once it works, when The map loads,
-    //  there will not reason to keep the data, then clear it
-    mapRef.current.on("load", () => {
-      if (pendingRouteRef.current) {
-        drawRoute(mapRef.current!, pendingRouteRef.current);
-        pendingRouteRef.current = null;
-      }
-    });
-
-    return () => mapRef.current?.remove();
   }, []);
 
-  // --- Capture click on map -------------------------------------------------
-
-  // On this case, check if map loaded.
-  // Then check where the user click on the map, and save the data on setMoveEvent
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    const handler = (e: mapboxgl.MapMouseEvent) => setMoveEvent(e);
-    map.on("click", handler);
-    return () => {
-      map.off("click", handler);
-    };
+  /*
+   When input search results arrive, reset all marker-based state
+   so the two modes don't conflict with each other.
+   FIX: Previously had two separate useEffects doing the same thing,
+   causing double setState calls and race conditions.
+  
+   Captures map click events and passes coordinates up via callback
+  */
+  const handleCoordsChange = useCallback((newCoord: [number, number]) => {
+    setCoordinates((prev) => [...prev, newCoord]);
   }, []);
 
-  // create a Mark by the coordinates an then add it on the map
-  useEffect(() => {
-    if (!mapRef.current || !moveEvent) return;
+  useMapClickMarker({
+    mapRef,
+    onCoordChanges: handleCoordsChange,
+    markRef,
+  });
 
-    const newMark = new mapboxgl.Marker()
-      .setLngLat([moveEvent.lngLat.lng, moveEvent.lngLat.lat])
-      .addTo(mapRef.current);
-
-    // add the Mark on map
-    markRef.current?.push(newMark);
-    setMarkCount((prev) => prev + 1);
-  }, [moveEvent]);
-
-  // --- create the second Mark
-  useEffect(() => {
-    if (!moveEvent) return;
-    setCoordinates((prev) => [
-      ...prev,
-      [moveEvent.lngLat.lng, moveEvent.lngLat.lat],
-    ]);
-  }, [moveEvent]);
-
-  // --- Create route when has two marks added on the map -------------------------------------
+  // When two markers are placed, creates a route between them
   useEffect(() => {
     if (coordinates.length !== 2) return;
 
-    const coords = coordinates.map(([lng, lat]) => `${lng},${lat}`).join(";");
+    async function adressResult() {
+      const result = await ClientMapRoute({ coordinates, mapRef });
 
-    async function newRoute() {
-      const map = mapRef.current;
-      const newRoute = await fetch(
-        `api/coordinates?coordinates=${coords}`,
-      ).then((data) => data.json());
-
-      const direction = await fetch("/api/matching", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          origin: newRoute.waypoints[0].location,
-          destination: newRoute.waypoints[1].location,
-        }),
-      }).then((r) => r.json());
-
-      setcoordinatesMatching(direction);
-      if (map) {
-        if (map.getLayer("circles-layer")) map.removeLayer("circles-layer");
-        if (map.getSource("circles-source")) map.removeSource("circles-source");
-      }
-      markRef.current.forEach((m) => m.remove());
-      markRef.current = [];
-      setMarkCount(0);
-      setCoordinates([]);
-      setMoveEvent(null);
+      setcoordinatesMatching(result);
     }
-
-    newRoute();
+    setMarkCount(0);
+    setCoordinates([]);
+    setMoveEvent(null);
+    adressResult();
   }, [coordinates]);
 
-  // --- Gemini -------------------------------------------------------
-
-  // --- React to new externals route data -----------------------------------
-
-  useEffect(() => {
-    // check if the map isn't disponible and if is posible to check the map style
-
-    // prevest the execution, if doesn't have any route data
-    if (!routeGeoData) return;
-
-    const map = mapRef.current;
-
-    // if the map and styles doens't loaded, then, save the route data
-    // avoiding erro when draw in a layout that doesn't not exist.
-    if (!map || !map.isStyleLoaded()) {
-      pendingRouteRef.current = routeGeoData;
-      return;
-    }
-    drawRoute(map, routeGeoData);
-  }, [routeGeoData]);
-
-  // PassengerMap.tsx — dentro do useEffect do coordinatesMatching
+  // Runs the AI pipeline when a route is created via markers.
   useEffect(() => {
     if (!coordinatesMatching) return;
+
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) {
       pendingRouteRef.current = coordinatesMatching;
@@ -170,66 +95,48 @@ export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
     }
 
     drawRoute(map, coordinatesMatching);
-    // ----------------------------
-    // ----------------------------
-    // ----------------------------
-    // ----------------------------
-    // ----------------------------
-    // ---------------------------- searching neighborhoods news
-    // ----------------------------
-    // ----------------------------
-    // ----------------------------
 
     const run = async () => {
       setRiskCoords([]);
-
-      const res = await fetch("/api/route-analysis", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ coordinates: coordinatesMatching.coordinates }),
+      const result = await DangerousZone({
+        setRiskCoords,
+        coordinatesMatching,
       });
 
-      if (!res.ok) {
-        const text = await res.text();
-        console.error("route-analysis falhou:", res.status, text);
-        return;
+      if (result?.incidents) {
+        setRiskCoords(result.incidents);
       }
 
-      const data = await res.json();
-
-      if (!data.GeminiResponded?.result) {
-        console.warn("Gemini não retornou resultado");
-        return;
+      if (result?.GeminiResponseText) {
+        console.log("Gemini response:", result.GeminiResponseText);
       }
-
-      const allCords = data.GeminiResponded.result[1].map((c: any) => c.coord);
-      const incidents = allCords.map(
-        ([lng, lat]: [number, number], index: number) => ({
-          id: String(index),
-          latitude: lat,
-          longitude: lng,
-        }),
-      );
-
-      setRiskCoords(incidents);
     };
 
     run();
-  }, [coordinatesMatching]);
+  }, [coordinatesMatching]); // FIX: BoxSearchRiskCoords removed from deps — it was causing the pipeline to re-run on input changes
 
-  // Clear from the map old occurrences circles
+  // Cleans up occurrence markers when occurrences change
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
-
-    // Remove previous occurrence markers
+    if (!map && !markRef) return;
     occurrenceMarkersRef.current.forEach((m) => m.remove());
     occurrenceMarkersRef.current = [];
-
+    markRef.current.forEach((m) => m.remove());
     if (!occurrences.length) return;
   }, [occurrences]);
 
-  // draw the route on the map
+  // Renders pulsing circles from Fogo Cruzado occurrences on the map
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !occurrences.length) return;
+    const cleanup = renderOccurrencesCircles({ occurrences, map });
+    return cleanup;
+  }, [occurrences]);
+
+  // Highlights dangerous neighborhoods identified by Gemini
+  useMapRiskZones({ mapRef, riskZones });
+
+  // Draws the route line and origin/destination markers on the map
   function drawRoute(map: mapboxgl.Map, geometry: GeoJSON.LineString) {
     ["route", "origin-circle", "destination-circle"].forEach((id) => {
       if (map.getLayer(id)) map.removeLayer(id);
@@ -283,162 +190,21 @@ export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
     map.fitBounds(bounds, { padding: 60, duration: 1000 });
   }
 
-  //  Create or update the occurrences circles
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !occurrences.length) return;
-
-    // make a FeatureCollection with all the occurrences
-    const geojson: GeoJSON.FeatureCollection = {
-      type: "FeatureCollection",
-      features: occurrences.map((occ) => ({
-        type: "Feature",
-        properties: { id: occ.id },
-        geometry: {
-          type: "Point",
-          coordinates: [occ.longitude, occ.latitude],
-        },
-      })),
-    };
-
-    const paint = () => {
-      // if the source aready exist, only update the datas
-      if (map.getSource("circles-source")) {
-        (map.getSource("circles-source") as mapboxgl.GeoJSONSource).setData(
-          geojson,
-        );
-        return;
-      }
-
-      // First time: create source + layer
-      map.addSource("circles-source", { type: "geojson", data: geojson });
-
-      map.addLayer({
-        id: "circles-layer",
-        type: "circle",
-        source: "circles-source",
-        paint: {
-          "circle-radius": 50,
-          "circle-color": "#EF4444",
-          "circle-opacity": 0.6,
-          "circle-stroke-width": 2,
-          "circle-stroke-color": "#FFFFFF",
-        },
-      });
-    };
-
-    if (map.isStyleLoaded()) paint();
-    else map.once("load", paint);
-  }, [occurrences]);
-
-  //  --------------------------------------------------------------
-  //  --------------------------------------------------------------
-  //  --------------------------------------------------------------
-  //  --------------------------------------------------------------
-  // to highlight the neighborhood on map after gemini check the rote
-
-  useEffect(() => {
-    const map = mapRef.current;
-
-    if (!map) return;
-
-    const draw = () => {
-      if (map.getLayer("risk-outline")) map.removeLayer("risk-outline");
-      if (map.getLayer("risk-fill")) map.removeLayer("risk-fill");
-      if (map.getSource("risk-zones")) map.removeSource("risk-zones");
-
-      if (!riskZones || !riskZones.features.length) return;
-
-      map.addSource("risk-zones", { type: "geojson", data: riskZones });
-
-      map.addLayer({
-        id: "risk-fill",
-        type: "fill",
-        source: "risk-zones",
-        paint: {
-          "fill-color": "#C44545",
-          "fill-opacity": 0.3,
-        },
-      });
-
-      map.addLayer({
-        id: "risk-outline",
-        type: "line",
-        source: "risk-zones",
-        paint: {
-          "line-color": "#C44545",
-          "line-width": 2,
-        },
-      });
-    };
-
-    if (map.isStyleLoaded()) draw();
-    else map.once("style.load", draw);
-  }, [riskZones]);
-
   return (
-    <section
-      className="relative w-[95%] md:w-[95%] h-[20em] md:h-[30em] 
-    rounded-[10px] bg-white overflow-hidden"
-    >
+    <section className="z-10 relative w-full md:w-[95%] h-screen md:h-[30em] rounded-[10px] bg-white overflow-hidden">
       <div ref={MapContainerRef} className="w-full h-full" />
 
-      {/* Loading indicator while fetching occurrences */}
+      {/* Loading indicator — shown while Fogo Cruzado occurrences are being fetched */}
       {riskZones && occLoading && (
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: "50%",
-            transform: "translateX(-50%)",
-            background: "rgba(20,20,20,0.85)",
-            color: "#fff",
-            padding: "6px 16px",
-            borderRadius: 20,
-            fontSize: 12,
-            fontFamily: "sans-serif",
-            backdropFilter: "blur(8px)",
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            zIndex: 10,
-          }}
-        >
-          <span
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
-              background: "#FF3B3B",
-              display: "inline-block",
-              animation: "pulse-dot 1s infinite",
-            }}
-          />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-black/85 text-white px-4 py-1.5 rounded-full text-xs font-sans backdrop-blur-sm flex items-center gap-2 z-10">
+          <span className="w-2 h-2 rounded-full bg-red-500 inline-block animate-pulse" />
           Analizando rota...
         </div>
       )}
 
-      {/* Alert banner when occurrences found */}
+      {/* Alert banner — shown when occurrences are found near the route */}
       {!riskZones && !occLoading && occurrences.length > 0 && (
-        <div
-          style={{
-            position: "absolute",
-            top: 12,
-            left: "50%",
-            transform: "translateX(-50%)",
-            background: "rgba(255,59,59,0.92)",
-            color: "#fff",
-            padding: "8px 18px",
-            borderRadius: 20,
-            fontSize: 13,
-            fontFamily: "sans-serif",
-            fontWeight: 600,
-            backdropFilter: "blur(8px)",
-            boxShadow: "0 4px 20px rgba(255,59,59,0.4)",
-            zIndex: 10,
-            whiteSpace: "nowrap",
-          }}
-        >
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-red-500/92 text-white px-4 py-2 rounded-full text-sm font-semibold backdrop-blur-sm shadow-lg shadow-red-500/40 z-10 whitespace-nowrap">
           ⚠ {occurrences.length} ocorrência{occurrences.length > 1 ? "s" : ""}{" "}
           nas últimas 2h na rota
         </div>
@@ -452,10 +218,6 @@ export default function PassengerMAp({ routeGeoData, incidents }: MapProps) {
         @keyframes pulse-core {
           0%, 100% { transform: scale(1); }
           50%       { transform: scale(1.15); }
-        }
-        @keyframes pulse-dot {
-          0%, 100% { opacity: 1; }
-          50%       { opacity: 0.3; }
         }
       `}</style>
     </section>

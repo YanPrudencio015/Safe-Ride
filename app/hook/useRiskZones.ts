@@ -1,3 +1,4 @@
+"use client";
 import { useEffect, useState } from "react";
 import { booleanPointInPolygon, point } from "@turf/turf";
 import type { Feature, Polygon, MultiPolygon, Geometry } from "geojson";
@@ -8,7 +9,7 @@ export type Incident = {
   longitude: number;
 };
 
-//  -------------- to close the ring --------------------------
+// to close the ring
 
 function closeRings(geometry: Geometry): Geometry {
   if (geometry.type === "Polygon") {
