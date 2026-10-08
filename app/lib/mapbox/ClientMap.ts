@@ -1,4 +1,3 @@
-"use client";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
@@ -17,21 +16,25 @@ export default function MapboxClient({
 }: MapboxClientParams) {
   if (!MapContainerRef.current) return;
 
-  mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAP_TOKEN!;
-  mapRef.current = new mapboxgl.Map({
+  mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAP_TOKEN;
+
+  const map = new mapboxgl.Map({
     container: MapContainerRef.current,
-    // style: "mapbox://styles/mapbox/streets-v12",
     style: "mapbox://styles/yanpereira015/cmud74wcn008201s689hzdtzp",
     center: [-43.25296155409677, -22.87598557368733],
     zoom: 9,
   });
+  mapRef.current = map;
 
-  mapRef.current.on("load", () => {
+  map.on("load", () => {
     if (pendingRouteRef.current) {
-      drawRoute(mapRef.current!, pendingRouteRef.current);
+      drawRoute(map, pendingRouteRef.current);
       pendingRouteRef.current = null;
     }
   });
 
-  return () => mapRef.current?.remove();
+  return () => {
+    map.remove();
+    mapRef.current = null;
+  };
 }
