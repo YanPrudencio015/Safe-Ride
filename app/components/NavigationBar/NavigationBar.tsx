@@ -43,21 +43,21 @@ useEffect(()=>{
 
 
     return(
-        <div className={`w-90 h-[9vh] border-0 bg-[#092328] z-50 fixed bottom-2 rounded-[3em]
+        <div className={`w-90 h-[7.5vh] border-0 bg-[#000] z-50 fixed bottom-2 rounded-[.5em]
             flex flex-row gap-4 items-center px-5 justify-center p-1 ${chathura.className} 
             `}>
 
                 {buttons.map((btn,index)=>(
                 <button key={index} onClick={()=>setToggleBtn(index)}
                 className={` h-full  flex justify-center items-center overflow-hidden
-                    relative before:absolute before:bg-[#00B7CD] rounded-[50em] 
-                    before:z-[-1]  before:rounded-[50em] border-0
+                    relative before:absolute before:bg-[#2373F4] rounded-[50em] 
+                    before:z-[-1]  before:rounded-[50em] border-0  text-[.9em]
                     ${toggleBtn === index? 
                         "w-[35vw] flex-row gap-1.5 before:w-[500em] before:h-[5em] text-[#fff] scale-100 before:transition-all before:duration-700": 
-                        "w-[13vw] before:w-0 before:h-0 text-[#00B7CD] scale-80"
+                        "w-[13vw] before:w-0 before:h-0 text-[#2373F4] scale-80"
                  }`}>
-                    <FontAwesomeIcon icon={btn.icon} className="size-2  text-[1.5em]" />
-                    <p className={` text-[2em] ${toggleBtn === index? "inline":"hidden"}`}>{btn.title}</p>
+                    <FontAwesomeIcon icon={btn.icon} className="text-[1em]" />
+                    <p className={` text-[2em] ${toggleBtn === index? "inline ":"hidden"}`}>{btn.title}</p>
                 </button>
                 ))}
         </div>

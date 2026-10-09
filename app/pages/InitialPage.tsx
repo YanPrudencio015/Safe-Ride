@@ -10,6 +10,8 @@ const InitialFormNoSSR = dynamic(
   { ssr: false }
 );
 
+import NavigatioBar from '../components/NavigationBar/NavigationBar';
+
 // import type
 import { CarsService, MapProps } from '../types/route';
 import { Incident } from '../hook/useRiskZones';
@@ -144,24 +146,63 @@ useEffect(()=>{
   // Distact the neighborhoods checked by Gemini
   useMapRiskZones({ mapRef, riskZones });
 
-  return (
-    <div
-      className={`z-20 px-5 absolute w-full h-[40em] bg-[#091413] 
-        text-2xl flex justify-start items-center
-        flex-col gap-10 left-0 ${hideInitial ? `left-[50em]` : `left-0`}`}
-    >
-      <h1 className={`${michroma.className} text-[1.5em] md:text-[2.5em] md:w-full text-white w-90
-        md:flex md:items-center md:justify-center md:p-2`}>
+
+  // get when Any car Service doesn't chosed but the inputs Are full, then show the message.
+
+  // when click to close de background and both fields are full, show the message
+  const [formBGToggle, setFormBGToggle] = useState(false);
+  const [showMessage, setShowMessage] = useState(false);
+  
+  useEffect(()=>{
+    const allright = coordinates.every(([first, second])=> first !== 0 && second !== 0);
+    
+    if(allright && !formBGToggle && serviceCar == null){
+      setShowMessage(true);
+    }
+  },[formBGToggle,coordinates,serviceCar])
+
+
+  return(
+    <div className={`absolute min-h-screen pb-[5em] w-full bg-slate-950 flex items-center 
+      justify-center z-20  
+      ${hideInitial ? `left-[50em]` : `left-0`} flex flex-col justify-around items-center duration-200
+       transition-all gap-4`}>
+      <div className={`absolute inset-0 
+        bg-[repeating-linear-gradient(45deg,#1e293b_0,#1e293b_1px,transparent_0,transparent_50%)] 
+        bg-size-[16px_16px] opacity-40 -z-10`}></div>
+        
+      <h1 className={`${michroma.className} text-[4vh] md:w-[80%] lg:w-1/2 text-white
+      w-90 flex  md:items-center lg:items-start md:justify-center lg:justify-start p-2 md:p-2 
+      text-center lg:rounded-[20em]`}>
         Where can we take you today?
       </h1>
-
-      <InitialFormNoSSR setCoordinates={setCoordinates} />
-
-      <SwiperCarServices setServiceCar={setServiceCar} />
-          <button className={`${michroma.className} relative w-90 h-[2em] rounded-[3em] flex justify-center 
-          items-center  bg-[#092328] border border-white scale-100 active:scale-95 active:border-0 `}
-          
+       <InitialFormNoSSR setCoordinates={setCoordinates} setFormBGToggle={setFormBGToggle}/>
+<div
+  className={`w-full h-[5vh] flex items-center p-2 relative overflow-hidden
+    before:absolute before:bottom-0 before:left-1 before:h-[1px] before:bg-white
+    before:transition-all before:ease-in-out
+    ${showMessage
+      ? "before:w-[60%] before:duration-300 before:delay-0"
+      : "before:w-0 before:duration-75"}
+  `}
+>
+  <h1
+    className={`${michroma.className} text-[2vh] text-white transition-all ease-in-out
+      ${showMessage
+        ? "duration-1000 delay-300 translate-y-0 opacity-100"
+        : "duration-75 delay-0 translate-y-96 opacity-0"}
+    `}
+  >
+    Choose a ride type
+  </h1>
+</div>
+        <SwiperCarServices setServiceCar={setServiceCar} />
+        <button className={`${michroma.className} relative w-90 h-[2em] rounded-[3em] flex justify-center 
+          items-center  bg-[#2373F4] border border-white scale-100 active:scale-95 active:border-0 
+          focus:scale-100 focus:scale-90`}  
           onClick={()=>{setHidInitial(true)}}> Mark on map</button>
+
+          {/* <NavigatioBar/> */}
     </div>
-  );
+  )
 }

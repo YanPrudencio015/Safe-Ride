@@ -24,7 +24,53 @@ const homenaje = Homenaje({
 });
 
 
-const Theme = {
+
+
+interface InitialFormProps {
+  setCoordinates: (coords: [number, number][]) => void;
+  setFormBGToggle: (bool: boolean)=> void;
+}
+
+export default function InitialForm({setCoordinates, setFormBGToggle}:InitialFormProps){
+
+    const[ firsCoordinates, setFirstCoordinates] = useState<[number, number] | null>(null);
+    const[ secondCoordinates, setSecondCoordinates] = useState<[number, number] | null >(null);
+    const [fristLocation, setFristLocation] = useState("");
+    const [secondLocation, setSecondLocation] = useState("");
+    const [backgroundTougle, setBackgroundTougle] = useState(false);
+
+  useEffect(()=>{
+    if (firsCoordinates && secondCoordinates) {
+   setCoordinates([firsCoordinates, secondCoordinates]);
+    }
+  },[firsCoordinates, secondCoordinates ])
+
+
+
+
+  useEffect(()=>{
+      setFormBGToggle(backgroundTougle);
+  },[backgroundTougle, setFormBGToggle])
+
+    const[currentScreen, setCurrenScreen] = useState(window.innerWidth);
+
+    useEffect(()=>{
+
+      function UpdateScreenSize(){
+        const width = window.innerWidth;
+        setCurrenScreen(width);
+      }
+
+      UpdateScreenSize();
+      window.addEventListener("resize", UpdateScreenSize);
+
+      return ()=>{
+        window.removeEventListener("resize", UpdateScreenSize);
+      }
+    },[])
+
+
+    const Theme = {
   variables: {
     unit: "20px",
     colorBackground: "#F5F5F5",
@@ -47,34 +93,16 @@ const Theme = {
     .Input{
         font-size: 20px ;
         width: 90%;
-        height: 40px;
+        height: ${currentScreen <= 767? "7vh": currentScreen >= 768? 
+                "2.5em": currentScreen >= 1024?"2.8em":"7vh"};
         background-color: #F5F5F5;
         text-align: center;
-        color: #091413
+        color: #091413;
         border-radius: 60px;
         z-index: 30;
     }
   `,
 };
-
-interface InitialFormProps {
-  setCoordinates: (coords: [number, number][]) => void;
-}
-
-export default function InitialForm({setCoordinates}:InitialFormProps){
-
-    const[ firsCoordinates, setFirstCoordinates] = useState<[number, number] | null>(null);
-    const[ secondCoordinates, setSecondCoordinates] = useState<[number, number] | null >(null);
-    const [fristLocation, setFristLocation] = useState("");
-    const [secondLocation, setSecondLocation] = useState("");
-    const [backgroundTougle, setBackgroundTougle] = useState(false);
-
-  useEffect(()=>{
-    if (firsCoordinates && secondCoordinates) {
-   setCoordinates([firsCoordinates, secondCoordinates]);
-    }
-  },[firsCoordinates, secondCoordinates ])
-
 
     return(
         <div className={`z-50 flex 
@@ -83,10 +111,12 @@ export default function InitialForm({setCoordinates}:InitialFormProps){
           "bg-transparent relative w-full"}
         `} onClick={()=>setBackgroundTougle(false)}>
 
-            <div className="w-98 md:w-[80%] h-[6em] md:h-[8em] bg-white/15 rounded-2xl shadow-[0_4px_30px_rgba(0,0,0,0.1)] 
-              backdrop-blur-[6.4px] flex justify-around items-center p-0 flex-col z-40 px-1">
+            <div className={`w-[90%] md:w-[80%] h-[10em] md:h-[12em] bg-white/15 rounded-2xl shadow-[0_4px_30px_rgba(0,0,0,0.1)] 
+              backdrop-blur-[6.4px] flex justify-around items-center p-0 flex-col z-40 px-1
+              ${backgroundTougle?'  transition-all ease-in-out duration-700 absolute top-5':""}`}
+              onClick={(e) => e.stopPropagation()}>
 
-            <div className="w-full md:w-100 h-[2em] md:h-[2.5em] bg-[#F5F5F5] rounded-[.5em] flex justify-center items-center"
+            <div className="w-[90%] md:w-100 h-[3em]  md:h-[2.5em] bg-transparent rounded-[.5em] flex justify-center items-center"
             >
                 <SearchBox
                       onRetrieve={(res) => {
@@ -103,7 +133,7 @@ export default function InitialForm({setCoordinates}:InitialFormProps){
                       /> 
 
             </div>
-            <div className="w-full md:w-100 h-[2em] md:h-[2.5em] bg-[#F5F5F5] rounded-[.5em] flex justify-center items-center"
+            <div className="w-[90%] md:w-100 h-[3em]  md:h-[2.5em] bg-transparent rounded-[.5em] flex justify-center items-center"
             >
                 <SearchBox
                       onRetrieve={(res) => {
