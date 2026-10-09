@@ -146,12 +146,12 @@ useEffect(()=>{
 
   return (
     <div
-      className={`z-20 px-5 absolute w-full h-[40em] bg-[#091413] 
+      className={`z-20 px-5 absolute w-full h-screen bg-[#091413] 
         text-2xl flex justify-start items-center
         flex-col gap-10 left-0 ${hideInitial ? `left-[50em]` : `left-0`}`}
     >
-      <h1 className={`${michroma.className} text-[1.5em] md:text-[2.5em] md:w-full text-white w-90
-        md:flex md:items-center md:justify-center md:p-2`}>
+      <h1 className={`${michroma.className} text-[3vh] md:text-[2.5em] md:w-full text-white w-90
+        md:flex md:items-center md:justify-center p-2 md:p-2 text-center`}>
         Where can we take you today?
       </h1>
 

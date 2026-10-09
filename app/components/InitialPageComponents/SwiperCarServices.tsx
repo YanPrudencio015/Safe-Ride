@@ -68,26 +68,70 @@ export default function SwiperCarServices({setServiceCar}:SwiperCarServicesProps
   // const [carService, setCarServise] = useState<CarsService>();
 
 
+  // calc the responsiveness and then return the number of cards in Swipper
+  const [windowWidth, setWindowWidth] = useState<number>(
+    typeof window!== "undefined"? window.innerWidth:1200);
 
+  function CardCountSlide(){
+    if(windowWidth >= 640) return 4.5
+    if(windowWidth >= 768 ) return 5
+    if(windowWidth >= 1024 ) return 7
+      return 2.5
+  }
+
+  useEffect(()=>{
+
+    function ResizeWindow(){
+      const width = window.innerWidth;
+      setWindowWidth(width);
+    } 
+
+    ResizeWindow();
+    window.addEventListener("resize",ResizeWindow);
+
+    return () => {
+    window.removeEventListener("resize", ResizeWindow);
+  };
+
+  },[])
+
+
+
+  // change Card toggle 
+
+  const[cardChosed, setCardChosed] = useState<number|null>(null);
+
+
+  useEffect(()=>{
+
+    console.log("Atenção: ", cardChosed)
+  },[cardChosed])
 
 
     return(
-        <div className="w-95 h-[8.5em] items-center z-10">
+        <div className="w-95 sm:w-full lg:w-[50%] h-[8.5em] items-center z-10 
+         rounded-2xl  overflow-y-visible">
       <Swiper
-        slidesPerView= {2.5}
+        slidesPerView= {CardCountSlide()}
         spaceBetween={10}
         pagination={{
           clickable: true,
         }}
-        className="mySwiper w-full h-full overflow-visible!"
+        className="mySwiper w-full h-full !overflow-visible"
       >
 
               {carsServices.map((car, index)=>(
-              <SwiperSlide onClick={()=>{setServiceCar(car)}} key={index} 
-              className=' w-[1em] 
-                rounded-[.8em] flex flex-row items-center 
-                justify-center text-white p-0
-                bg-white/[0.02]  shadow-[0_4px_30px_rgba(0,0,0,0.1)] backdrop-blur-[5.5px] border border-white/10'>
+              <SwiperSlide onClick={()=>{setServiceCar(car), setCardChosed(index)}} key={index} 
+              className={` w-[1em] rounded-[.8em] flex flex-row items-center 
+                justify-center text-white p-0 shadow-[0_4px_30px_rgba(0,0,0,0.1)]
+                backdrop-blur-[5.5px] border border-white/10 overflow-hidden relative 
+                 before:absolute before:z-[-10] before:transition-all
+                before:rounded-[20em] before:top-1/2 before:left-1/2 before:-translate-x-1/2 
+                before:-translate-y-1/2 before:duration-300
+                 before:w-[1em] before:h-[1em] transition-all duration-300
+                 ${cardChosed == index?
+                  "before:bg-[#2373F4] before:w-[10em] before:h-[10em] -translate-y-6" :
+                 ' bg-white/2  duration-150'}`}>
                 <h1 className={`text-[.6em] h-10 ${michroma.className} flex items-center 
                 justify-center px-2`}>{car.service}</h1>
                 <p className={`w-full  text-center ${roboto.className}
